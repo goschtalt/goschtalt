@@ -6,7 +6,7 @@ require (
 	github.com/goschtalt/approx v1.0.0
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/stretchr/testify v1.9.0
-	gonum.org/v1/gonum v0.14.0
+	gonum.org/v1/gonum v0.15.0
 )
 
 require (
