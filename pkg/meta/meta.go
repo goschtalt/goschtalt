@@ -403,14 +403,14 @@ func expand(max *int, in, startToken, endToken string, mapper func(string) (stri
 	*max--
 
 	start := strings.Index(in, startToken)
-	if -1 == start {
+	if start == -1 {
 		return in, false, nil
 	}
 
 	rest := in[start+len(startToken):]
 	end := strings.Index(rest, endToken)
 
-	if -1 == end {
+	if end == -1 {
 		return in, false, nil
 	}
 

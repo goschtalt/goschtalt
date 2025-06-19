@@ -1242,9 +1242,9 @@ func (d *Decoder) decodeArray(name string, data interface{}, val reflect.Value) 
 		// Check input type
 		if dataValKind != reflect.Array && dataValKind != reflect.Slice {
 			if d.config.WeaklyTypedInput {
-				switch {
+				switch dataValKind {
 				// Empty maps turn into empty arrays
-				case dataValKind == reflect.Map:
+				case reflect.Map:
 					if dataVal.Len() == 0 {
 						val.Set(reflect.Zero(arrayType))
 						return nil

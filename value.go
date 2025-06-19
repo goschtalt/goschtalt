@@ -183,7 +183,7 @@ func (v value) apply(opts *options) error {
 	return nil
 }
 
-func (_ value) ignoreDefaults() bool {
+func (value) ignoreDefaults() bool {
 	return false
 }
 

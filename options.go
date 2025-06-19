@@ -364,7 +364,7 @@ func (g groupOption) apply(opts *options) error {
 	return nil
 }
 
-func (_ groupOption) ignoreDefaults() bool {
+func (groupOption) ignoreDefaults() bool {
 	return false
 }
 
@@ -404,7 +404,7 @@ func (a disableAutoCompileOption) apply(opts *options) error {
 	return nil
 }
 
-func (_ disableAutoCompileOption) ignoreDefaults() bool { return false }
+func (disableAutoCompileOption) ignoreDefaults() bool { return false }
 func (a disableAutoCompileOption) String() string {
 	return print.P("AutoCompile", print.BoolSilentTrue(bool(a)))
 }
@@ -464,7 +464,7 @@ func mergeOverrides(in []map[string]string) (map[string]string, error) {
 	for i := range in {
 		for k, v := range in[i] {
 			if _, a := sToC[k]; a {
-				return nil, fmt.Errorf("%w, '%s' is duplicated.", ErrInvalidInput, k)
+				return nil, fmt.Errorf("%w, '%s' is duplicated.", ErrInvalidInput, k) // nolint:staticcheck
 			}
 			sToC[k] = v
 		}
@@ -499,14 +499,14 @@ type setKeyDelimiterOption string
 
 func (s setKeyDelimiterOption) apply(opts *options) error {
 	if len(s) == 0 {
-		return fmt.Errorf("%w: a KeyDelimiter with length > 0 must be specified.", ErrInvalidInput)
+		return fmt.Errorf("%w: a KeyDelimiter with length > 0 must be specified.", ErrInvalidInput) // nolint:staticcheck
 	}
 
 	opts.keyDelimiter = string(s)
 	return nil
 }
 
-func (_ setKeyDelimiterOption) ignoreDefaults() bool {
+func (setKeyDelimiterOption) ignoreDefaults() bool {
 	return false
 }
 
@@ -561,8 +561,8 @@ func (h hashOption) apply(opts *options) error {
 	return nil
 }
 
-func (_ hashOption) ignoreDefaults() bool { return false }
-func (_ hashOption) String() string       { return "SetHasher" }
+func (hashOption) ignoreDefaults() bool { return false }
+func (hashOption) String() string       { return "SetHasher" }
 
 // RecordSorter provides the methods needed to sort records.
 type RecordSorter interface {
@@ -661,8 +661,8 @@ func (s sortRecordsOption) apply(opts *options) error {
 	return nil
 }
 
-func (_ sortRecordsOption) ignoreDefaults() bool { return false }
-func (s sortRecordsOption) String() string       { return s.text }
+func (sortRecordsOption) ignoreDefaults() bool { return false }
+func (s sortRecordsOption) String() string     { return s.text }
 
 // HintEncoder provides a way to suggest importing additional encoders without
 // needing to include a specific one in goschtalt.  Generally, this option is
@@ -737,7 +737,7 @@ func (w withDecoderOption) apply(opts *options) error {
 	return nil
 }
 
-func (_ withDecoderOption) ignoreDefaults() bool {
+func (withDecoderOption) ignoreDefaults() bool {
 	return false
 }
 
@@ -769,7 +769,7 @@ func (w withEncoderOption) apply(opts *options) error {
 	return nil
 }
 
-func (_ withEncoderOption) ignoreDefaults() bool {
+func (withEncoderOption) ignoreDefaults() bool {
 	return false
 }
 
@@ -792,9 +792,9 @@ func DisableDefaultPackageOptions() Option {
 
 type disableDefaultPackageOption struct{}
 
-func (_ disableDefaultPackageOption) apply(opts *options) error { return nil }
-func (_ disableDefaultPackageOption) ignoreDefaults() bool      { return true }
-func (_ disableDefaultPackageOption) String() string {
+func (disableDefaultPackageOption) apply(opts *options) error { return nil }
+func (disableDefaultPackageOption) ignoreDefaults() bool      { return true }
+func (disableDefaultPackageOption) String() string {
 	return print.P("DisableDefaultPackageOptions")
 }
 
@@ -818,7 +818,7 @@ func (d defaultMarshalOption) apply(opts *options) error {
 	return nil
 }
 
-func (_ defaultMarshalOption) ignoreDefaults() bool {
+func (defaultMarshalOption) ignoreDefaults() bool {
 	return false
 }
 
@@ -847,7 +847,7 @@ func (d defaultUnmarshalOption) apply(opts *options) error {
 	return nil
 }
 
-func (_ defaultUnmarshalOption) ignoreDefaults() bool {
+func (defaultUnmarshalOption) ignoreDefaults() bool {
 	return false
 }
 
@@ -877,7 +877,7 @@ func (d defaultValueOption) apply(opts *options) error {
 	return nil
 }
 
-func (_ defaultValueOption) ignoreDefaults() bool {
+func (defaultValueOption) ignoreDefaults() bool {
 	return false
 }
 
@@ -992,7 +992,7 @@ func (s setMaxExpansionsOption) apply(opts *options) error {
 	return nil
 }
 
-func (_ setMaxExpansionsOption) ignoreDefaults() bool {
+func (setMaxExpansionsOption) ignoreDefaults() bool {
 	return false
 }
 

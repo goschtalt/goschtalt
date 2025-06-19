@@ -158,7 +158,7 @@ func (c *Config) unmarshal(key string, result any, tree meta.Object, opts ...Unm
 
 	options.decoder.MatchName = func(key, field string) bool {
 		encoded := options.mapper(field)
-		if "-" == encoded {
+		if encoded == "-" {
 			return false
 		}
 		return encoded == key

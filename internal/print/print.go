@@ -246,8 +246,8 @@ func labeledSimpleOption(txt string, label ...string) simpleOption {
 // simpleOption is a simple option that represent most of the rest of the options.
 type simpleOption string
 
-func (_ simpleOption) isYields() bool { return false }
-func (_ simpleOption) isSubOpt() bool { return false }
+func (simpleOption) isYields() bool   { return false }
+func (simpleOption) isSubOpt() bool   { return false }
 func (s simpleOption) String() string { return string(s) }
 
 // SubOpt denotes when the documented option is not the main goschtalt.Option
@@ -258,9 +258,9 @@ func SubOpt() Option {
 
 type subOption string
 
-func (_ subOption) isYields() bool { return false }
-func (_ subOption) isSubOpt() bool { return true }
-func (_ subOption) String() string { return "" }
+func (subOption) isYields() bool { return false }
+func (subOption) isSubOpt() bool { return true }
+func (subOption) String() string { return "" }
 
 // Yields denotes when a group of options is describing the outcome of set of
 // objects for representation using more of the `Foo() --> things` pattern.  The
@@ -275,8 +275,8 @@ type yieldsOption struct {
 	opts []Option
 }
 
-func (_ yieldsOption) isYields() bool { return true }
-func (_ yieldsOption) isSubOpt() bool { return false }
+func (yieldsOption) isYields() bool { return true }
+func (yieldsOption) isSubOpt() bool { return false }
 func (y yieldsOption) String() string {
 	var b strings.Builder
 

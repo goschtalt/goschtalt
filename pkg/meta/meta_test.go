@@ -65,6 +65,32 @@ func TestObjectFromRawWithOrigin(t *testing.T) {
 				},
 			},
 		},
+		{
+			description: "Output an empty origin.",
+			thing: map[string]any{
+				"one": nil,
+			},
+			where: []Origin{origin},
+			at:    []string{"a", "b"},
+			expected: Object{
+				Origins: []Origin{origin},
+				Map: map[string]Object{
+					"a": {
+						Origins: []Origin{origin},
+						Map: map[string]Object{
+							"b": {
+								Origins: []Origin{origin},
+								Map: map[string]Object{
+									"one": {
+										Origins: []Origin{origin},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.description, func(t *testing.T) {

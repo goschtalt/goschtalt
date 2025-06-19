@@ -96,11 +96,11 @@ type buffer struct {
 
 func (b buffer) apply(opts *options) error {
 	if len(b.recordName) == 0 {
-		return fmt.Errorf("%w: a recordName with length > 0 must be specified.", ErrInvalidInput)
+		return fmt.Errorf("%w: a recordName with length > 0 must be specified.", ErrInvalidInput) // nolint:staticcheck
 	}
 
 	if b.getter == nil {
-		return fmt.Errorf("%w: a non-nil BufferGetter must be specified.", ErrInvalidInput)
+		return fmt.Errorf("%w: a non-nil BufferGetter must be specified.", ErrInvalidInput) // nolint:staticcheck
 	}
 
 	r := record{
@@ -123,7 +123,7 @@ func (b buffer) apply(opts *options) error {
 	return nil
 }
 
-func (_ buffer) ignoreDefaults() bool {
+func (buffer) ignoreDefaults() bool {
 	return false
 }
 

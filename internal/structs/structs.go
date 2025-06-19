@@ -583,6 +583,7 @@ func (s *Struct) nested(val reflect.Value) interface{} { //nolint:gocognit
 		// do not iterate of non struct types, just pass the value. Ie: []int,
 		// []string, co... We only iterate further if it's a struct.
 		// i.e []foo or []*foo
+		// nolint:staticcheck
 		if val.Type().Elem().Kind() != reflect.Struct &&
 			!(val.Type().Elem().Kind() == reflect.Ptr &&
 				val.Type().Elem().Elem().Kind() == reflect.Struct) {

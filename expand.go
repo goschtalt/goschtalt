@@ -151,7 +151,7 @@ func (exp expand) apply(opts *options) error {
 	return nil
 }
 
-func (_ expand) ignoreDefaults() bool {
+func (expand) ignoreDefaults() bool {
 	return false
 }
 
