@@ -147,31 +147,58 @@ func (c *Config) Compile() error {
 func (c *Config) compile() error {
 	start := time.Now()
 	c.explain.compileStartedAt(start)
-	e := c.compileInternal(start)
-	c.explain.CompileFinishedAt = time.Now()
-	c.explain.recordError(e)
+	results, e := c.compileInternal(false)
+	results.explain.CompileFinishedAt = time.Now()
+	results.explain.recordError(e)
+	c.explain = results.explain
+
+	if e == nil {
+		c.records = results.records
+		c.tree = results.merged
+		c.compiledAt = start
+		c.hash = results.hash
+	}
+
 	return e
 }
 
+// compileResults is a helper struct that holds the results of the compilation
+// process.  It contains the merged configuration tree, the records that were
+// processed, the hash of the merged configuration, and an explanation of how
+// the configuration was compiled.
+//
+// Originally this was all done in place in the Config object, but once the
+// ability to compile only the defaults was added, it became necessary to
+// separate the results of the compilation from the Config object itself.
+type compileResults struct {
+	explain Explanation
+	records []string
+	merged  meta.Object
+	hash    []byte
+}
+
 // compileInternal is the internal compile function that does most of the work.
-func (c *Config) compileInternal(start time.Time) error {
+func (c *Config) compileInternal(defaultsOnly bool) (compileResults, error) {
+	var rv compileResults
+
+	rv.explain = c.explain
 	full, defaultCount, err := c.getOrderedConfigs()
 	if err != nil {
-		return err
+		return rv, err
 	}
 
-	merged := meta.Object{Map: make(map[string]meta.Object)}
-	records := make([]string, 0, len(full))
+	rv.merged = meta.Object{Map: make(map[string]meta.Object)}
+	rv.records = make([]string, 0, len(full))
 
 	for i, cfg := range full {
 		// Build an incremental snapshot of the configuration at this step so
 		// user provided functions can use the cfg values to acquire more if
 		// needed.
-		incremental := merged
+		incremental := rv.merged
 
 		incremental, _, err = expandTree(incremental, c.opts.exapansionMax, c.opts.expansions)
 		if err != nil {
-			return err
+			return rv, err
 		}
 
 		unmarshalFunc := func(key string, result any, opts ...UnmarshalOption) error {
@@ -180,37 +207,37 @@ func (c *Config) compileInternal(start time.Time) error {
 		}
 
 		if err = cfg.fetch(c.opts.keyDelimiter, unmarshalFunc, c.opts.decoders, c.opts.valueOptions); err != nil {
-			return err
+			return rv, err
 		}
-		merged, err = merged.Merge(cfg.tree)
+		rv.merged, err = rv.merged.Merge(cfg.tree)
 		if err != nil {
-			return err
+			return rv, err
 		}
-		records = append(records, cfg.name)
-		c.explain.compileRecord(cfg.name, i < defaultCount, time.Now())
+		rv.records = append(rv.records, cfg.name)
+		rv.explain.compileRecord(cfg.name, i < defaultCount, time.Now())
+
+		if defaultsOnly && i < defaultCount {
+			return rv, nil
+		}
 	}
 
 	// Expand the final tree to ensure all values are expanded.
-	merged, _, err = expandTree(merged, c.opts.exapansionMax, c.opts.expansions)
+	rv.merged, _, err = expandTree(rv.merged, c.opts.exapansionMax, c.opts.expansions)
 	if err != nil {
-		return err
+		return rv, err
 	}
 
 	// Record the expansions in effect.
 	for _, exp := range c.opts.expansions {
-		c.explain.compileExpansions(exp.String())
+		rv.explain.compileExpansions(exp.String())
 	}
 
-	hash, err := c.opts.hasher.Hash(merged)
+	rv.hash, err = c.opts.hasher.Hash(rv.merged)
 	if err != nil {
-		return err
+		return rv, err
 	}
 
-	c.records = records
-	c.tree = merged
-	c.compiledAt = start
-	c.hash = hash
-	return nil
+	return rv, nil
 }
 
 // getOrderedConfigs is a helper function that combines the different groups of

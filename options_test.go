@@ -393,25 +393,25 @@ func TestOptions(t *testing.T) {
 			opt:         DefaultMarshalOptions(),
 			str:         "DefaultMarshalOptions()",
 		}, {
-			description: "DefaultMarshalOptions( RedactSecrets(true), IncludeOrigins(true), FormatAs(foo) )",
-			opt:         DefaultMarshalOptions(RedactSecrets(true), IncludeOrigins(true), FormatAs("foo")),
-			str:         "DefaultMarshalOptions( RedactSecrets(), IncludeOrigins(), FormatAs('foo') )",
+			description: "DefaultMarshalOptions( RedactSecrets(true), IncludeOrigins(true), FormatAs(foo), IncludeDocumentation(true), OnlyDefaults(true) )",
+			opt:         DefaultMarshalOptions(RedactSecrets(true), IncludeOrigins(true), FormatAs("foo"), IncludeDocumentation(true), OnlyDefaults(true)),
+			str:         "DefaultMarshalOptions( RedactSecrets(), IncludeOrigins(), FormatAs('foo'), IncludeDocumentation(), OnlyDefaults() )",
 			goal: options{
-				marshalOptions: []MarshalOption{redactSecretsOption(true), includeOriginsOption(true), formatAsOption("foo")},
+				marshalOptions: []MarshalOption{redactSecretsOption(true), includeOriginsOption(true), formatAsOption("foo"), includeDocumentationOption(true), onlyDefaultsOption(true)},
 			},
 		}, {
-			description: "DefaultMarshalOptions( RedactSecrets(false), IncludeOrigins(false) )",
-			opt:         DefaultMarshalOptions(RedactSecrets(false), IncludeOrigins(false)),
-			str:         "DefaultMarshalOptions( RedactSecrets(false), IncludeOrigins(false) )",
+			description: "DefaultMarshalOptions( RedactSecrets(false), IncludeOrigins(false), IncludeDocumentation(false), OnlyDefaults(false) )",
+			opt:         DefaultMarshalOptions(RedactSecrets(false), IncludeOrigins(false), IncludeDocumentation(false), OnlyDefaults(false)),
+			str:         "DefaultMarshalOptions( RedactSecrets(false), IncludeOrigins(false), IncludeDocumentation(false), OnlyDefaults(false) )",
 			goal: options{
-				marshalOptions: []MarshalOption{redactSecretsOption(false), includeOriginsOption(false)},
+				marshalOptions: []MarshalOption{redactSecretsOption(false), includeOriginsOption(false), includeDocumentationOption(false), onlyDefaultsOption(false)},
 			},
 		}, {
-			description: "DefaultMarshalOptions( RedactSecrets(), IncludeOrigins() )",
-			opt:         DefaultMarshalOptions(RedactSecrets(), IncludeOrigins()),
-			str:         "DefaultMarshalOptions( RedactSecrets(), IncludeOrigins() )",
+			description: "DefaultMarshalOptions( RedactSecrets(), IncludeOrigins(), IncludeDocumentation(), OnlyDefaults() )",
+			opt:         DefaultMarshalOptions(RedactSecrets(), IncludeOrigins(), IncludeDocumentation(), OnlyDefaults()),
+			str:         "DefaultMarshalOptions( RedactSecrets(), IncludeOrigins(), IncludeDocumentation(), OnlyDefaults() )",
 			goal: options{
-				marshalOptions: []MarshalOption{redactSecretsOption(true), includeOriginsOption(true)},
+				marshalOptions: []MarshalOption{redactSecretsOption(true), includeOriginsOption(true), includeDocumentationOption(true), onlyDefaultsOption(true)},
 			},
 		}, {
 			description: "DefaultMarshalOptions( RedactSecrets() ), DefaultMarshalOptions( IncludeOrigins() )",
@@ -688,6 +688,11 @@ func TestOptions(t *testing.T) {
 				}
 				return false
 			},
+		}, {
+			description: "AddDocsJSON()",
+			opt:         AddDocsJSON([]byte("invalid json")),
+			str:         "WithError( 'input is invalid, AddDocsJSON tree is invalid: failed to unmarshal JSON: invalid character 'i' looking for beginning of value' )",
+			expectErr:   ErrInvalidInput,
 		}, {
 			description: "Options returning an error",
 			opt: Options(

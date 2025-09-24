@@ -6,6 +6,7 @@ package meta
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"reflect"
 	"strconv"
 	"strings"
@@ -75,7 +76,7 @@ const (
 // field will always be ignored.
 type Object struct {
 	Origins []Origin          // The list of origins that influenced this Object.
-	Array   []Object          // The array of Objects (if a map).
+	Array   []Object          // The array of Objects (if an array).
 	Map     map[string]Object // The map of Objects (if a map).
 	Value   any               // The value of the configuration parameter (if a value).
 	secret  bool              // If the value is secret.
@@ -174,6 +175,37 @@ func (obj Object) ToRaw() any {
 	return obj.Value
 }
 
+// Flatten converts the Object tree into a flat map[string]Object where the
+// keys are the path to the object in the tree.  The path is built using the
+// specified separater.  The resulting map is a copy of the Object tree and
+// does not share any references with the original Object tree.
+func (obj Object) Flatten(separater string) map[string]Object {
+	return obj.flatten([]string{}, separater)
+}
+
+func (obj Object) flatten(prefix []string, separater string) map[string]Object {
+	if obj.Kind() == Value {
+		return map[string]Object{
+			strings.Join(prefix, separater): obj,
+		}
+	}
+
+	if obj.Kind() == Array {
+		m := make(map[string]Object, len(obj.Array))
+		for i, val := range obj.Array {
+			index := strconv.Itoa(i)
+			maps.Copy(m, val.flatten(append(prefix, index), separater))
+		}
+		return m
+	}
+
+	m := make(map[string]Object, len(obj.Map))
+	for key, val := range obj.Map {
+		maps.Copy(m, val.flatten(append(prefix, key), separater))
+	}
+	return m
+}
+
 // ObjectFromRaw converts a native go tree into the equivalent Object tree structure.
 func ObjectFromRaw(in any, at ...string) (obj Object) {
 	return ObjectFromRawWithOrigin(in, nil, at...)
@@ -187,27 +219,46 @@ func ObjectFromRawWithOrigin(in any, where []Origin, at ...string) (obj Object) 
 		obj.Origins = where
 	}
 
-	if len(at) > 0 && len(at[0]) > 0 {
+	if len(at) > 0 && at[0] != "" {
 		obj.Map = make(map[string]Object)
 		obj.Map[at[0]] = ObjectFromRawWithOrigin(in, where, at[1:]...)
 		return obj
 	}
 
-	switch in := in.(type) {
-	case []any:
-		obj.Array = make([]Object, len(in))
-		for i, val := range in {
-			obj.Array[i] = ObjectFromRawWithOrigin(val, where)
-		}
-	case map[string]any:
-		obj.Map = make(map[string]Object)
-		for key, val := range in {
-			obj.Map[key] = ObjectFromRawWithOrigin(val, where)
-		}
-	default:
-		obj.Value = in
+	// If the input is nil, return an empty object, because val.Type() will
+	// panic if the ValueOf(nil).Type() is performed.
+	if in == nil {
+		return obj
 	}
 
+	val := reflect.ValueOf(in)
+	typ := val.Type()
+	knd := typ.Kind()
+
+	switch knd {
+	case reflect.Map:
+		obj.Map = make(map[string]Object, len(val.MapKeys()))
+		for _, k := range val.MapKeys() {
+			obj.Map[k.String()] = ObjectFromRawWithOrigin(val.MapIndex(k).Interface(), where)
+		}
+		return obj
+	case reflect.Slice, reflect.Array:
+		// Distinguish between named vs. unnamed slices/arrays
+		if typ.Name() == "" {
+			// Unnamed slice/array like []any or []string:
+			n := val.Len()
+			obj.Array = make([]Object, n)
+			for i := 0; i < n; i++ {
+				obj.Array[i] = ObjectFromRawWithOrigin(val.Index(i).Interface(), where)
+			}
+			return obj
+		}
+		// Otherwise, it’s a named type (e.g., type MySlice []string),
+		// so store it as an Object value like a normal value.
+	}
+
+	// Fallback: treat whatever’s left as a single Value
+	obj.Value = in
 	return obj
 }
 
@@ -729,8 +780,7 @@ func getValidCmd(key string, obj Object) (command, error) {
 func (obj Object) FilterNonSerializable() Object {
 	switch obj.Kind() {
 	case Array:
-		//array := make([]Object, 0, len(obj.Array))
-		var array []Object
+		array := make([]Object, 0, len(obj.Array))
 
 		for _, val := range obj.Array {
 			if val.isSerializable() {
@@ -742,7 +792,7 @@ func (obj Object) FilterNonSerializable() Object {
 		}
 		obj.Array = array
 	case Map:
-		m := make(map[string]Object)
+		m := make(map[string]Object, len(obj.Map))
 
 		for key, val := range obj.Map {
 			if val.isSerializable() {

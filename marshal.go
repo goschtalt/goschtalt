@@ -5,9 +5,13 @@ package goschtalt
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/goschtalt/goschtalt/internal/encoding"
+	"github.com/goschtalt/goschtalt/internal/encoding/yaml"
 	"github.com/goschtalt/goschtalt/internal/print"
+	"github.com/goschtalt/goschtalt/pkg/meta"
 )
 
 // Marshal renders the into the format specified ('json', 'yaml' or other extensions
@@ -25,7 +29,54 @@ func (c *Config) Marshal(opts ...MarshalOption) ([]byte, error) {
 		return nil, ErrNotCompiled
 	}
 
-	var cfg marshalOptions
+	cfg, err := c.getMarshalOptions(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	tree, err := c.getMarshalTree(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	// Issue 52 - depending on encoders, they may encode a nil or null object
+	// instead of returning an expected empty array of bytes.
+	if tree == nil {
+		return []byte{}, nil
+	}
+
+	if cfg.withDocumentation {
+		docs := c.opts.doc.Translate(cfg.Map)
+
+		got, err := calcUnified(&docs, tree, cfg.onlyDefaults)
+		if err != nil {
+			return nil, fmt.Errorf("failed to calculate unified tree: %w", err)
+		}
+
+		var out strings.Builder
+		if err = cfg.enc.Encode(&out, &got); err != nil {
+			return nil, fmt.Errorf("failed to encode document: %w", err)
+		}
+		return []byte(out.String()), nil
+	}
+
+	enc, err := c.opts.encoders.find(cfg.format)
+	if err != nil {
+		return nil, err
+	}
+
+	if cfg.withOrigins {
+		return enc.EncodeExtended(*tree)
+	}
+
+	return enc.Encode(tree.ToRaw())
+}
+
+func (c *Config) getMarshalOptions(opts []MarshalOption) (*marshalOptions, error) {
+	cfg := marshalOptions{
+		withDocumentation: false, //true,
+		enc:               &yaml.Renderer{},
+	}
 	exts := c.opts.encoders.extensions()
 	if len(exts) > 0 {
 		cfg.format = exts[0]
@@ -40,27 +91,28 @@ func (c *Config) Marshal(opts ...MarshalOption) ([]byte, error) {
 		}
 	}
 
+	return &cfg, nil
+}
+
+func (c *Config) getMarshalTree(cfg *marshalOptions) (*meta.Object, error) {
 	tree := c.tree
+	if cfg.onlyDefaults {
+		results, err := c.compileInternal(true)
+		if err != nil {
+			return nil, err
+		}
+		tree = results.merged
+	}
+
 	if cfg.redactSecrets {
 		tree = tree.ToRedacted()
 	}
 
-	// Issue 52 - depending on encoders, they may encode a nil or null object
-	// instead of returning an expected empty array of bytes.
 	if tree.IsEmpty() {
-		return []byte{}, nil
+		return nil, nil
 	}
 
-	enc, err := c.opts.encoders.find(cfg.format)
-	if err != nil {
-		return nil, err
-	}
-
-	if cfg.withOrigins {
-		return enc.EncodeExtended(tree)
-	}
-
-	return enc.Encode(tree.ToRaw())
+	return &tree, nil
 }
 
 // ---- MarshalOption options follow -------------------------------------------
@@ -75,9 +127,28 @@ type MarshalOption interface {
 }
 
 type marshalOptions struct {
-	redactSecrets bool
-	withOrigins   bool
-	format        string
+	redactSecrets     bool
+	onlyDefaults      bool
+	withDocumentation bool
+	withOrigins       bool
+	format            string
+	enc               encoding.Encoder
+	mappers           []Mapper
+}
+
+func (m marshalOptions) Map(s string) string {
+	for _, m := range m.mappers {
+		rv := m.Map(s)
+		switch rv {
+		case "":
+			continue
+		case "-":
+			return s
+		default:
+			s = rv
+		}
+	}
+	return s
 }
 
 // RedactSecrets enables the replacement of secret portions of the tree with
@@ -143,4 +214,76 @@ func (f formatAsOption) marshalApply(opts *marshalOptions) error {
 
 func (f formatAsOption) String() string {
 	return print.P("FormatAs", print.String(string(f)), print.SubOpt())
+}
+
+// IncludeDocumentation enables or disables including documentation comments in
+// the output, if the output format supports it.
+func IncludeDocumentation(doc ...bool) MarshalOption {
+	doc = append(doc, true)
+	return includeDocumentationOption(doc[0])
+}
+
+type includeDocumentationOption bool
+
+func (i includeDocumentationOption) marshalApply(opts *marshalOptions) error {
+	opts.withDocumentation = bool(i)
+	return nil
+}
+
+func (i includeDocumentationOption) String() string {
+	return print.P("IncludeDocumentation", print.BoolSilentTrue(bool(i)), print.SubOpt())
+}
+
+// OnlyDefaults enables or disables including only default values in the output.
+// This is mainly useful for generating documentation or for debugging purposes.
+func OnlyDefaults(only ...bool) MarshalOption {
+	only = append(only, true)
+	return onlyDefaultsOption(only[0])
+}
+
+type onlyDefaultsOption bool
+
+func (o onlyDefaultsOption) marshalApply(opts *marshalOptions) error {
+	opts.onlyDefaults = bool(o)
+	return nil
+}
+
+func (o onlyDefaultsOption) String() string {
+	return print.P("OnlyDefaults", print.BoolSilentTrue(bool(o)), print.SubOpt())
+}
+
+type FormatAsYAMLOptions struct {
+	// MaxLineLength is the maximum length of a line before it will be broken.
+	// If less than 1 is provided, the default value will be used.  The default
+	// value is 80.
+	MaxLineLength int
+
+	// TrailingCommentColumn is the column at which to place trailing comments.
+	// If less than 1 is provided, the default value will be used.  The default
+	// value is 80.
+	TrailingCommentColumn int
+
+	// SpacesPerIndent is the number of spaces to use for each indentation level.
+	// If less than 1 is provided, the default value will be used.  The default
+	// value is 2.
+	SpacesPerIndent int
+}
+
+func (f FormatAsYAMLOptions) marshalApply(opts *marshalOptions) error {
+	opts.format = "yaml"
+	opts.enc = &yaml.Renderer{
+		MaxLineLength:         f.MaxLineLength,
+		TrailingCommentColumn: f.TrailingCommentColumn,
+		SpacesPerIndent:       f.SpacesPerIndent,
+	}
+	return nil
+}
+
+func (f FormatAsYAMLOptions) String() string {
+	return print.P("FormatAsYAML", print.SubOpt())
+}
+
+func FormatAsYAML(opt ...FormatAsYAMLOptions) MarshalOption {
+	opt = append(opt, FormatAsYAMLOptions{})
+	return &opt[0]
 }

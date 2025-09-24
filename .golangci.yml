@@ -21,6 +21,9 @@ linters:
       statements: 60
     gocognit:
       min-complexity: 26
+    goconst:
+      min-len: 5
+      min-occurrences: 5
     misspell:
       locale: US
   exclusions:
