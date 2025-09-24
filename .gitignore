@@ -37,3 +37,5 @@ licensed
 
 # Ignore helper shell scripts in root.
 *.sh
+
+commit.msg

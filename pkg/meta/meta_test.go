@@ -1990,3 +1990,75 @@ func TestClone(t *testing.T) {
 		})
 	}
 }
+
+func TestFlatten(t *testing.T) {
+	tests := []struct {
+		description string
+		in          Object
+		expected    map[string]Object
+	}{
+		{
+			description: "Output an small tree.",
+			in: Object{
+				Map: map[string]Object{
+					"foo": {
+						secret: true,
+						Value:  "very secret.",
+					},
+				},
+			},
+			expected: map[string]Object{
+				"foo": {
+					Value:  "very secret.",
+					secret: true,
+				},
+			},
+		}, {
+			description: "Output an larger tree.",
+			in: Object{
+				Map: map[string]Object{
+					"foo": {
+						Map: map[string]Object{
+							"bar": {
+								Value: int(123),
+							},
+							"car": {
+								Array: []Object{
+									{
+										Map: map[string]Object{
+											"sam": {
+												Value: "cart",
+											},
+										},
+									}, {
+										Value: "golf",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: map[string]Object{
+				"foo.bar": {
+					Value: int(123),
+				},
+				"foo.car.0.sam": {
+					Value: "cart",
+				},
+				"foo.car.1": {
+					Value: "golf",
+				},
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.description, func(t *testing.T) {
+			assert := assert.New(t)
+
+			got := tc.in.Flatten(".")
+
+			assert.Equal(tc.expected, got)
+		})
+	}
+}

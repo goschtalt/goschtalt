@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/goschtalt/goschtalt/pkg/debug"
+	"github.com/goschtalt/goschtalt/pkg/doc"
 	"github.com/goschtalt/goschtalt/pkg/meta"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -207,6 +208,7 @@ func TestCompile(t *testing.T) {
 		Duration time.Duration
 		T        time.Time
 		Func     func(string) string
+		Array    []string
 	}
 
 	tests := []struct {
@@ -214,6 +216,7 @@ func TestCompile(t *testing.T) {
 		skipCompile    bool
 		opts           []Option
 		key            string
+		expectInternal *meta.Object
 		expect         any
 		files          []string
 		expectedRemaps map[string]string
@@ -622,6 +625,7 @@ func TestCompile(t *testing.T) {
 						Duration: time.Second,
 						T:        time.Date(2022, time.December, 30, 0, 0, 0, 0, time.UTC),
 						Func:     strings.ToUpper,
+						Array:    []string{"a", "b", "c"},
 					},
 					adaptTimeToCfg("2006-01-02"),
 					adaptDurationToCfg(),
@@ -633,11 +637,104 @@ func TestCompile(t *testing.T) {
 					adaptStringToFunc(),
 				),
 			},
+			expectInternal: &meta.Object{
+				Origins: []meta.Origin{
+					{
+						File: "record1",
+						Line: 0,
+						Col:  0,
+					},
+				},
+				Map: map[string]meta.Object{
+					"Array": {
+						Origins: []meta.Origin{
+							{
+								File: "record1",
+								Line: 0,
+								Col:  0,
+							},
+						},
+						Array: []meta.Object{
+							{
+								Origins: []meta.Origin{
+									{
+										File: "record1",
+										Line: 0,
+										Col:  0,
+									},
+								},
+								Value: "a",
+							},
+							{
+								Origins: []meta.Origin{
+									{
+										File: "record1",
+										Line: 0,
+										Col:  0,
+									},
+								},
+								Value: "b",
+							},
+							{
+								Origins: []meta.Origin{
+									{
+										File: "record1",
+										Line: 0,
+										Col:  0,
+									},
+								},
+								Value: "c",
+							},
+						},
+					},
+					"Duration": {
+						Origins: []meta.Origin{
+							{
+								File: "record1",
+								Line: 0,
+								Col:  0,
+							},
+						},
+						Value: "1s",
+					},
+					"Foo": {
+						Origins: []meta.Origin{
+							{
+								File: "record1",
+								Line: 0,
+								Col:  0,
+							},
+						},
+						Value: "string",
+					},
+					"Func": {
+						Origins: []meta.Origin{
+							{
+								File: "record1",
+								Line: 0,
+								Col:  0,
+							},
+						},
+						Value: "upper",
+					},
+					"T": {
+						Origins: []meta.Origin{
+							{
+								File: "record1",
+								Line: 0,
+								Col:  0,
+							},
+						},
+						Value: "2022-12-30",
+					},
+				},
+			},
 			expect: withAll{
 				Foo:      "string",
 				Duration: time.Second,
 				T:        time.Date(2022, time.December, 30, 0, 0, 0, 0, time.UTC),
 				Func:     strings.ToUpper,
+				Array:    []string{"a", "b", "c"},
 			},
 			files: []string{"record1"},
 			compare: func(assert *assert.Assertions, z, y any) bool {
@@ -656,7 +753,8 @@ func TestCompile(t *testing.T) {
 
 				return assert.Equal(a.Foo, b.Foo) &&
 					assert.Equal(a.Duration, b.Duration) &&
-					assert.Equal(a.T, b.T)
+					assert.Equal(a.T, b.T) &&
+					assert.Equal(a.Array, b.Array)
 			},
 		}, {
 
@@ -954,6 +1052,13 @@ func TestCompile(t *testing.T) {
 			if tc.expectedErr == nil {
 				assert.NoError(err)
 				require.NotNil(cfg)
+
+				if tc.expectInternal != nil {
+					if !assert.Equal(*tc.expectInternal, cfg.tree) { // nolint:unused,staticcheck
+						//pp.SetDefaultMaxDepth(10)
+						//pp.Print(cfg.tree)
+					}
+				}
 				if tc.expect != nil {
 					want := reflect.Zero(reflect.TypeOf(tc.expect)).Interface()
 					err = cfg.Unmarshal(tc.key, &want)
@@ -1234,6 +1339,331 @@ func TestSetMaxExpansions(t *testing.T) {
 			require.NoError(err)
 
 			assert.Equal(tc.expansions, cfg.opts.exapansionMax)
+		})
+	}
+}
+
+func TestDocument(t *testing.T) {
+	type st1 struct {
+		A []string
+	}
+	type st2 struct {
+		B []string
+	}
+	type st struct {
+		Hello string
+		Blue  string
+		Madd  string
+		Inner st2
+		Other []st1
+	}
+
+	commonOpts := []Option{
+		AddValue("record1", Root, st{
+			Hello: "Mr. Blue Sky",
+			Blue:  "jay",
+			Madd:  "cat",
+			Inner: st2{
+				B: []string{"one", "two", "three"},
+			},
+			Other: []st1{
+				{A: []string{"four", "five"}},
+				{A: []string{"six", "seven"}},
+			},
+		}, AsDefault()),
+		AddValue("record2", Root, st{
+			Hello: "Mr. Man",
+			Blue:  "jay",
+			Madd:  "cat",
+		}),
+		AddDocs(doc.Object{
+			Type: doc.TYPE_ROOT,
+			Children: map[string]doc.Object{
+				"Hello": {
+					Name: "Hello",
+					Doc:  "Hello documentation.",
+					Type: doc.TYPE_STRING,
+				},
+				"Inner": {
+					Name: "Inner",
+					Doc:  "Inner documentation.",
+					Type: doc.TYPE_STRUCT,
+					Children: map[string]doc.Object{
+						"B": {
+							Name: "B",
+							Doc:  "B documentation.",
+							Type: doc.TYPE_ARRAY,
+							Children: map[string]doc.Object{
+								doc.NAME_ARRAY: {
+									Name: doc.NAME_ARRAY,
+									Doc:  "Array documentation.",
+									Type: doc.TYPE_STRING,
+								},
+							},
+						},
+					},
+				},
+			},
+		}),
+	}
+
+	tests := []struct {
+		description string
+		opts        []Option
+		expect      string
+	}{
+		{
+			description: "A simple case with a document.",
+			opts:        commonOpts,
+			expect: `---
+Blue: jay
+
+# Hello documentation.
+# type: <string>
+Hello: Mr. Man
+
+# Inner documentation.
+# type: <struct>
+Inner:
+
+  # B documentation.
+  # type: array of <string>
+  B:
+
+    # Array documentation.
+    # type: <string>
+    - one
+    - two
+    - three
+Madd: cat
+Other:
+  -
+    A:
+      - four
+      - five
+  -
+    A:
+      - six
+      - seven
+
+`,
+		}, {
+			description: "Only the default values",
+			opts:        append(commonOpts, DefaultMarshalOptions(OnlyDefaults())),
+			expect: `---
+Blue: jay
+
+# Hello documentation.
+# type: <string>
+Hello: Mr. Blue Sky
+
+# Inner documentation.
+# type: <struct>
+Inner:
+
+  # B documentation.
+  # type: array of <string>
+  B:
+
+    # Array documentation.
+    # type: <string>
+    - one
+    - two
+    - three
+Madd: cat
+Other:
+  -
+    A:
+      - four
+      - five
+  -
+    A:
+      - six
+      - seven
+
+`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.description, func(t *testing.T) {
+			assert := assert.New(t)
+			require := require.New(t)
+
+			cfg, err := New(tc.opts...)
+			require.NoError(err)
+			require.NotNil(cfg)
+
+			doc, err := cfg.Marshal(IncludeDocumentation())
+			require.NoError(err)
+
+			if !assert.Equal(tc.expect, string(doc)) {
+				fmt.Println("Got:")
+				fmt.Println(string(doc))
+			}
+		})
+	}
+}
+
+func TestWithDocsJSON(t *testing.T) {
+	type st1 struct {
+		A []string
+	}
+	type st2 struct {
+		B []string
+	}
+	type st struct {
+		Hello string
+		Blue  string
+		Madd  string
+		Inner st2
+		Other []st1
+	}
+
+	commonOptsJSON := []Option{
+		DefaultMarshalOptions(FormatAsYAML()),
+		AddValue("record1", Root, st{
+			Hello: "Mr. Blue Sky",
+			Blue:  "jay",
+			Madd:  "cat",
+			Inner: st2{
+				B: []string{"one", "two", "three"},
+			},
+			Other: []st1{
+				{A: []string{"four", "five"}},
+				{A: []string{"six", "seven"}},
+			},
+		}, AsDefault()),
+		AddValue("record2", Root, st{
+			Hello: "Mr. Man",
+			Blue:  "jay",
+			Madd:  "cat",
+		}),
+		AddDocsJSON([]byte(`{
+			"Type": "<root>",
+			"Children": {
+				"Hello": {
+					"Name": "Hello",
+					"Doc": "Hello documentation.",
+					"Type": "<string>"
+				},
+				"Inner": {
+					"Name": "Inner",
+					"Doc": "Inner documentation.",
+					"Type": "<struct>",
+					"Children": {
+						"B": {
+							"Name": "B",
+							"Doc": "B documentation.",
+							"Type": "<array>",
+							"Children": {
+								"<array>": {
+									"Name": "<array>",
+									"Doc": "Array documentation.",
+									"Type": "<string>"
+								}
+							}
+						}
+					}
+				}
+			}
+		}`)),
+	}
+
+	tests := []struct {
+		description string
+		opts        []Option
+		expect      string
+	}{
+		{
+			description: "A simple case with a document from JSON.",
+			opts:        commonOptsJSON,
+			expect: `---
+Blue: jay
+
+# Hello documentation.
+# type: <string>
+Hello: Mr. Man
+
+# Inner documentation.
+# type: <struct>
+Inner:
+
+  # B documentation.
+  # type: array of <string>
+  B:
+
+    # Array documentation.
+    # type: <string>
+    - one
+    - two
+    - three
+Madd: cat
+Other:
+  -
+    A:
+      - four
+      - five
+  -
+    A:
+      - six
+      - seven
+
+`,
+		}, {
+			description: "Only the default values from JSON docs",
+			opts:        append(commonOptsJSON, DefaultMarshalOptions(OnlyDefaults())),
+			expect: `---
+Blue: jay
+
+# Hello documentation.
+# type: <string>
+Hello: Mr. Blue Sky
+
+# Inner documentation.
+# type: <struct>
+Inner:
+
+  # B documentation.
+  # type: array of <string>
+  B:
+
+    # Array documentation.
+    # type: <string>
+    - one
+    - two
+    - three
+Madd: cat
+Other:
+  -
+    A:
+      - four
+      - five
+  -
+    A:
+      - six
+      - seven
+
+`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.description, func(t *testing.T) {
+			assert := assert.New(t)
+			require := require.New(t)
+
+			cfg, err := New(tc.opts...)
+			require.NoError(err)
+			require.NotNil(cfg)
+
+			doc, err := cfg.Marshal(IncludeDocumentation())
+			require.NoError(err)
+
+			if !assert.Equal(tc.expect, string(doc)) {
+				fmt.Println("Got:")
+				fmt.Println(string(doc))
+			}
 		})
 	}
 }

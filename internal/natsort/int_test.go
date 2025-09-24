@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: 2015 Vincent Batoufflet and Marc Falzon
 // SPDX-FileCopyrightText: 2022 Mark Karpelès
+// SPDX-FileCopyrightText: 2025 Weston Schmidt <weston_schmidt@alumni.purdue.edu>
 // SPDX-License-Identifier: BSD-3-Clause
 //
 // This file originated from https://github.com/facette/natsort/pull/2/files
@@ -23,19 +24,19 @@ func (s stringSlice) Len() int {
 }
 
 func (s stringSlice) Less(a, b int) bool {
-	return Compare(s[a], s[b])
+	return CompareInteger(s[a], s[b])
 }
 
 func (s stringSlice) Swap(a, b int) {
 	s[a], s[b] = s[b], s[a]
 }
 
-// Sort sorts a list of strings in a natural order
-func Sort(l []string) {
+// SortInt sorts a list of strings in a natural order
+func SortInt(l []string) {
 	sort.Sort(stringSlice(l))
 }
 
-var testList = []string{
+var testIntList = []string{
 	"1000X Radonius Maximus",
 	"10X Radonius",
 	"00010X Radonius 2",
@@ -74,7 +75,7 @@ var testList = []string{
 	"Xiph Xlater 58",
 }
 
-func TestSort(t *testing.T) {
+func TestIntSort(t *testing.T) {
 	tests := []struct {
 		description string
 		want        []string
@@ -189,23 +190,23 @@ func TestSort(t *testing.T) {
 				/* shuffle the list, randomly */
 				r.Shuffle(len(list), func(i, j int) { list[i], list[j] = list[j], list[i] })
 
-				run(assert, require, list, tc.want)
+				runInt(assert, require, list, tc.want)
 			}
 		})
 	}
 }
 
-func run(assert *assert.Assertions, _ *require.Assertions, list, want []string) {
+func runInt(assert *assert.Assertions, _ *require.Assertions, list, want []string) {
 	start := make([]string, len(list))
 	copy(start, list)
 
-	Sort(list)
+	SortInt(list)
 
-	assert.Equal(list, want)
+	assert.Equal(want, list)
 }
 
-func BenchmarkSort1(b *testing.B) {
+func BenchmarkIntSort(b *testing.B) {
 	for n := 0; n < b.N; n++ {
-		Sort(testList)
+		SortInt(testIntList)
 	}
 }

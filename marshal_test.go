@@ -121,3 +121,82 @@ func TestMarshal(t *testing.T) {
 		})
 	}
 }
+
+type MapKeys struct {
+	fn func(string) string
+}
+
+func (m MapKeys) Map(s string) string {
+	return m.fn(s)
+}
+
+func TestMarshalOptionsMap(t *testing.T) {
+	tests := []struct {
+		description string
+		input       string
+		mapper      []Mapper
+		expected    string
+	}{
+		{
+			description: "Map a single key.",
+			input:       "foo",
+			mapper: []Mapper{
+				&MapKeys{
+					fn: func(s string) string {
+						return s + "_mapped"
+					},
+				},
+			},
+			expected: "foo_mapped",
+		}, {
+			description: "Map multiple mappers.",
+			input:       "foo",
+			mapper: []Mapper{
+				&MapKeys{
+					fn: func(s string) string { return s + "_mapped" },
+				},
+				&MapKeys{
+					fn: func(s string) string { return s + "_again" },
+				},
+			},
+			expected: "foo_mapped_again",
+		}, {
+			description: "Map with an empty response.",
+			input:       "foo",
+			mapper: []Mapper{&MapKeys{
+				fn: func(s string) string { return "" },
+			}},
+			expected: "foo",
+		}, {
+			description: "No mapping function provided.",
+			input:       "foo",
+			expected:    "foo",
+		}, {
+			description: "Map until the - is returned.",
+			input:       "foo",
+			mapper: []Mapper{
+				&MapKeys{
+					fn: func(s string) string { return s + "_mapped" },
+				},
+				&MapKeys{
+					fn: func(s string) string { return "-" },
+				},
+				&MapKeys{
+					fn: func(s string) string { return s + "_unreached" },
+				},
+			},
+			expected: "foo_mapped",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.description, func(t *testing.T) {
+			opt := marshalOptions{
+				mappers: tc.mapper,
+			}
+
+			got := opt.Map(tc.input)
+
+			assert.Equal(t, tc.expected, got)
+		})
+	}
+}
