@@ -244,7 +244,33 @@ func (c *Config) compileInternal(defaultsOnly bool) (compileResults, error) {
 // configuration files into a single, correctly ordered list and the number of
 // default values that are at the start of the list.
 func (c *Config) getOrderedConfigs() ([]record, int, error) {
-	cfgs, err := filegroupsToRecords(c.opts.keyDelimiter, c.opts.filegroups, c.opts.decoders)
+	// Resolve any deferred filegroups now that all options (including decoders) are applied
+	// Build a map of insertion positions to resolved filegroups
+	deferredMap := make(map[int][]filegroup)
+	for _, deferred := range c.opts.deferredFilegroups {
+		resolved, err := deferred.fn()
+		if err != nil {
+			return nil, 0, err
+		}
+		if len(resolved) > 0 {
+			deferredMap[deferred.insertAt] = append(deferredMap[deferred.insertAt], resolved...)
+		}
+	}
+
+	// Merge regular and deferred filegroups in the correct order
+	var filegroups []filegroup
+	for i := 0; i <= len(c.opts.filegroups); i++ {
+		// Insert any deferred filegroups that belong at this position
+		if deferred, ok := deferredMap[i]; ok {
+			filegroups = append(filegroups, deferred...)
+		}
+		// Insert the regular filegroup at this index (if it exists)
+		if i < len(c.opts.filegroups) {
+			filegroups = append(filegroups, c.opts.filegroups[i])
+		}
+	}
+
+	cfgs, err := filegroupsToRecords(c.opts.keyDelimiter, filegroups, c.opts.decoders)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -263,19 +289,65 @@ func (c *Config) getOrderedConfigs() ([]record, int, error) {
 func (c *Config) getSorter() func([]record) {
 	return func(a []record) {
 		sort.SliceStable(a, func(i, j int) bool {
-			return c.opts.sorter.Less(a[i].name, a[j].name)
+			// Use sortKey for ordering, but fall back to name if sortKey is empty
+			keyI := a[i].sortKey
+			if keyI == "" {
+				keyI = a[i].name
+			}
+			keyJ := a[j].sortKey
+			if keyJ == "" {
+				keyJ = a[j].name
+			}
+			return c.opts.sorter.Less(keyI, keyJ)
 		})
 	}
 }
 
-// OrderList is a helper function that sorts a caller provided list of filenames
-// exactly the same way the Config object would sort them when reading and
-// merging the records when the configuration is being compiled.  It also filters
-// the list based on the decoders present.
+// OrderList is a helper function that sorts and filters a caller-provided list
+// of filenames based on the Config's compilation state.
+//
+// After compilation: Returns only files that were actually compiled (present in
+// Explain().Records), ordered by their actual compile sequence. Requested filenames
+// are matched against compiled records by basename, so both "file.json" and
+// "dir/file.json" will match a record with basename "file.json". If multiple
+// requests match the same record basename, all matches are output at that record's
+// position in the compile order.
+//
+// Before compilation: Filters the list to files with registered decoders and
+// sorts them using the configured sorter. Note that this pre-compilation order
+// may not match the eventual compile order for options that use internal sort
+// keys (such as StdCfgLayout).
 func (c *Config) OrderList(list []string) []string {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
+	// If we've compiled, use the actual compile order from explanation
+	if !c.explain.CompileStartedAt.IsZero() && len(c.explain.Records) > 0 {
+		// Build a map from basename to original requested paths
+		// This allows callers to pass relative paths (e.g. "conf.d/01.json")
+		// which will match against the basename stored in rec.Name (e.g. "01.json")
+		basenameToRequested := make(map[string][]string)
+		for _, item := range list {
+			base := path.Base(item)
+			basenameToRequested[base] = append(basenameToRequested[base], item)
+		}
+
+		// Return files in actual compile order, preserving original path formats
+		var out []string
+		for _, rec := range c.explain.Records {
+			if paths := basenameToRequested[rec.Name]; len(paths) > 0 {
+				// Append all requested instances at this file's position
+				out = append(out, paths...)
+				// Mark as consumed so subsequent records don't duplicate
+				basenameToRequested[rec.Name] = nil
+			}
+		}
+		return out
+	}
+
+	// Not yet compiled - sort using the configured sorter
+	// Note: This may not match eventual compile order for options using
+	// internal sort keys (like StdCfgLayout's namePrefix)
 	cfgs := make([]record, len(list))
 	for i, item := range list {
 		cfgs[i] = record{name: item}

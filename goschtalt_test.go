@@ -987,6 +987,13 @@ func TestCompile(t *testing.T) {
 			},
 			files: []string{"1.json"},
 		}, {
+			description: "Make sure the AddTreeHaltAlways stops regardless of files found.",
+			opts: []Option{
+				AddTreeHaltAlways(fs1, "none"),
+				AddTree(fs1, "3.json"),
+				WithDecoder(&testDecoder{extensions: []string{"json"}}),
+			},
+		}, {
 			description: "Ensure the HintDecoder() can find one.",
 			opts: []Option{
 				HintDecoder("json", "http://github.com/goschtalt/json-decoder", "json"),
@@ -1123,6 +1130,20 @@ func TestOrderList(t *testing.T) {
 				"2.json",
 				"9.json",
 			},
+		}, {
+			description: "A list with duplicates (pre-compilation)",
+			in: []string{
+				"2.json",
+				"1.json",
+				"2.json",
+				"1.json",
+			},
+			expect: []string{
+				"1.json",
+				"1.json",
+				"2.json",
+				"2.json",
+			},
 		},
 	}
 
@@ -1133,6 +1154,87 @@ func TestOrderList(t *testing.T) {
 
 			cfg, err := New(
 				AutoCompile(false),
+				WithDecoder(&testDecoder{extensions: []string{"json"}}),
+			)
+			require.NotNil(cfg)
+			require.NoError(err)
+
+			got := cfg.OrderList(tc.in)
+
+			assert.Equal(tc.expect, got)
+		})
+	}
+}
+
+func TestOrderListDuplicates(t *testing.T) {
+	fs := fstest.MapFS{
+		"1.json": &fstest.MapFile{
+			Data: []byte(`{"a": "1"}`),
+			Mode: 0755,
+		},
+		"2.json": &fstest.MapFile{
+			Data: []byte(`{"b": "2"}`),
+			Mode: 0755,
+		},
+		"3.json": &fstest.MapFile{
+			Data: []byte(`{"c": "3"}`),
+			Mode: 0755,
+		},
+	}
+
+	tests := []struct {
+		description string
+		in          []string
+		expect      []string
+	}{
+		{
+			description: "Requested duplicates are preserved (post-compilation)",
+			in: []string{
+				"2.json",
+				"1.json",
+				"2.json",
+				"1.json",
+			},
+			expect: []string{
+				"1.json",
+				"1.json",
+				"2.json",
+				"2.json",
+			},
+		}, {
+			description: "Requesting same file three times",
+			in: []string{
+				"1.json",
+				"1.json",
+				"1.json",
+			},
+			expect: []string{
+				"1.json",
+				"1.json",
+				"1.json",
+			},
+		}, {
+			description: "Mixed duplicates and singles",
+			in: []string{
+				"3.json",
+				"1.json",
+				"3.json",
+			},
+			expect: []string{
+				"1.json",
+				"3.json",
+				"3.json",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.description, func(t *testing.T) {
+			assert := assert.New(t)
+			require := require.New(t)
+
+			cfg, err := New(
+				AddTree(fs, "."),
 				WithDecoder(&testDecoder{extensions: []string{"json"}}),
 			)
 			require.NotNil(cfg)
@@ -1358,7 +1460,7 @@ func TestDocument(t *testing.T) {
 		Other []st1
 	}
 
-	commonOpts := []Option{
+	commonOpts := []Option{ // nolint:prealloc
 		AddValue("record1", Root, st{
 			Hello: "Mr. Blue Sky",
 			Blue:  "jay",
@@ -1520,7 +1622,7 @@ func TestWithDocsJSON(t *testing.T) {
 		Other []st1
 	}
 
-	commonOptsJSON := []Option{
+	commonOptsJSON := []Option{ // nolint:prealloc
 		DefaultMarshalOptions(FormatAsYAML()),
 		AddValue("record1", Root, st{
 			Hello: "Mr. Blue Sky",
