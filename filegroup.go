@@ -37,6 +37,15 @@ type filegroup struct {
 	// found.
 	halt bool
 
+	// haltAlways means processing should always stop after this filegroup,
+	// regardless of whether any files were found.
+	haltAlways bool
+
+	// namePrefix is prepended to record sortKeys from this filegroup to control
+	// sort order. This is used internally to ensure certain filegroups are
+	// processed before others (e.g., "0-" for appName.* and "1-" for conf.d/*).
+	namePrefix string
+
 	// as is the decoder to use for the files described by this filegroup.
 	as string
 }
@@ -115,9 +124,17 @@ func (g filegroup) toRecord(file, delimiter string, decoders *codecRegistry[deco
 		return nil, err
 	}
 
+	// Use basename as the record name (shown to users).
+	// If namePrefix is set, use it only for the sortKey to control ordering.
+	sortKey := basename
+	if g.namePrefix != "" {
+		sortKey = g.namePrefix + basename
+	}
+
 	return []record{{
-		name: basename,
-		tree: tree,
+		name:    basename,
+		sortKey: sortKey,
+		tree:    tree,
 	}}, nil
 }
 
@@ -151,6 +168,7 @@ func (g filegroup) enumerate() ([]string, error) {
 			files = append(files, found...)
 		}
 	}
+
 	sort.Strings(files)
 
 	return files, nil
@@ -226,8 +244,10 @@ func filegroupsToRecords(delimiter string, filegroups []filegroup, decoders *cod
 		}
 		rv = append(rv, tmp...)
 
-		// Stop processing because we were told to & we found files.
-		if len(tmp) > 0 && grp.halt {
+		// Stop processing if:
+		// - haltAlways is set (regardless of whether files were found), or
+		// - halt is set and we found files in this filegroup
+		if grp.haltAlways || (len(tmp) > 0 && grp.halt) {
 			break
 		}
 	}

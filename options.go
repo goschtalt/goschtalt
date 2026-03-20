@@ -43,6 +43,16 @@ type Option interface {
 	ignoreDefaults() bool
 }
 
+// deferredFilegroup represents a filegroup creation that is deferred until
+// compile time when all decoders are available.
+type deferredFilegroup struct {
+	// insertAt is the position in the filegroups slice where the resolved
+	// filegroups should be inserted, maintaining option application order.
+	insertAt int
+	// fn is called at compile time to create the actual filegroups.
+	fn func() ([]filegroup, error)
+}
+
 type options struct {
 	// Settings where there are one.
 	disableAutoCompile bool
@@ -66,6 +76,11 @@ type options struct {
 	// General configurations; there can be many.
 	filegroups []filegroup
 	values     []record
+
+	// Deferred filegroups are resolved at compile time after all options
+	// (including decoders) have been applied. This allows options like
+	// StdCfgLayout to make decoder-aware decisions.
+	deferredFilegroups []deferredFilegroup
 
 	// Expansions; there can be many.
 	expansions    []expand
@@ -209,6 +224,24 @@ func AddTreeHalt(fs fs.FS, path string) Option {
 			paths:   []string{path},
 			recurse: true,
 			halt:    true,
+		},
+	}
+}
+
+// AddTreeHaltAlways adds a directory tree (including all subdirectories) for
+// inclusion when compiling the configuration, and halts the process of adding
+// more file records regardless of whether any files were found.
+//
+// This option works the same as [AddTree]() except no further files are
+// processed after this group is evaluated.
+func AddTreeHaltAlways(fs fs.FS, path string) Option {
+	return &groupOption{
+		name: "AddTreeHaltAlways",
+		grp: filegroup{
+			fs:         fs,
+			paths:      []string{path},
+			recurse:    true,
+			haltAlways: true,
 		},
 	}
 }
@@ -1001,30 +1034,47 @@ func (a addDocsOption) String() string {
 //
 // # For non-windows implementations:
 //
-// The first individual configuration file or 'conf.d' directory found is used.
-// Once a set of configuration file(s) has been found any configuration files
-// included afterward are ignored.
+// The first location with decodable configuration files is used. Locations are
+// evaluated based on registered decoders - a location with only unsupported file
+// extensions (e.g., *.bak, *.tmp) will be skipped in favor of lower-priority
+// locations with decodable files. Once a location with decodable files is found,
+// that location's files are loaded and all subsequent locations are ignored.
+// Within each location, both the appName.* pattern and conf.d/* directory
+// (including subdirectories) are searched and all matching decodable files are
+// included.
 //
-// The order the files/directories are searched.
+// The order the locations are searched:
 //
-//  1. The provided files in the argument list.  If any are provided,
-//     configuration must be found exclusively here.
+// (1) The provided files in the argument list.  If any are provided, configuration must be found exclusively here.
 //
-// 2. Any files matching this path (if it exists) and glob:
+//	./<provided files>
 //
-//   - $HOME/.<appName>/<appName>.*
+// (2) Current directory (for development/testing convenience):
 //
-// 3. Any files found in this directory (if it exists):
+//	./<appName>.*
+//	./conf.d/*
 //
-//   - $HOME/.<appName>/conf.d/
+// (3) User-specific configuration:
 //
-// 4. Any files matching this path (if it exists) and glob:
+//	$HOME/.<appName>/<appName>.*
+//	$HOME/.<appName>/conf.d/*
 //
-//   - /etc/<appName>/<appName>.*
+// (4) System-wide configuration:
 //
-// 5. Any files found in this directory (if it exists):
+//	/etc/<appName>/<appName>.*
+//	/etc/<appName>/conf.d/*
 //
-//   - /etc/<appName>/conf.d/
+// # File Processing Order and Naming
+//
+// Within each location, files are processed in a specific order to ensure
+// conf.d/* files consistently override appName.* files:
+//
+//  1. appName.* files are processed first
+//  2. conf.d/* files are processed second (and override appName.* files)
+//
+// This ordering is enforced internally using a separate sort key, ensuring
+// correct processing order while preserving original filenames in explanations,
+// error messages, and file lists.
 //
 // # For windows implementations:
 //

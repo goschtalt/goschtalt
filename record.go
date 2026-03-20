@@ -11,10 +11,11 @@ import (
 // record is the basic unit needed to define a configuration and it's name.
 // With this information all the records can be decoded.
 type record struct {
-	name string
-	val  *value
-	buf  *buffer
-	tree meta.Object
+	name    string // The original, unmodified filename shown to users
+	sortKey string // Internal key used for sorting (may contain prefixes)
+	val     *value
+	buf     *buffer
+	tree    meta.Object
 }
 
 // fetch normalizes the calls to the val or encoded types of records.
