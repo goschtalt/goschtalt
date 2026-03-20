@@ -705,7 +705,7 @@ func (d *Decoder) decodeUint(name string, data interface{}, val reflect.Value) e
 				fmt.Errorf("cannot parse '%s', %d overflows uint", name, i),
 			)
 		}
-		val.SetUint(uint64(i))
+		val.SetUint(uint64(i)) // nolint:gosec
 	case dataKind == reflect.Uint:
 		val.SetUint(dataVal.Uint())
 	case dataKind == reflect.Float32:

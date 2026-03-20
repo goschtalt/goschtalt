@@ -360,7 +360,7 @@ func ExampleAddDocsJSON_multipleDocTrees() {
 				"port": 8080,
 				"host": "0.0.0.0",
 			},
-			Database: map[string]any{
+			Database: map[string]any{ // nolint:gosec
 				"driver": "postgres",
 				"dsn":    "postgresql://user:pass@localhost/db",
 			},

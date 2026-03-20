@@ -246,7 +246,7 @@ func (o *Object) HashVector() string {
 	buf.WriteString(string(o.Type))
 	buf.WriteString(o.Doc)
 	buf.WriteString(o.Tag)
-	buf.WriteString(fmt.Sprintf("%t%t", o.Optional, o.Deprecated))
+	fmt.Fprintf(&buf, "%t%t", o.Optional, o.Deprecated)
 
 	keys := slices.Collect(maps.Keys(o.Children))
 	sort.Strings(keys)
