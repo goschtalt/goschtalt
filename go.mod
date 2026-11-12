@@ -5,7 +5,7 @@ go 1.23
 toolchain go1.23.1
 
 require (
-	github.com/goschtalt/approx v1.0.0
+	github.com/goschtalt/approx v1.0.1
 	github.com/stretchr/testify v1.12.1
 )
 
